@@ -1,6 +1,8 @@
 from __future__ import division
+import datetime
 import numpy as np
 import scipy.io
+from scipy.io import wavfile
 from scipy.special._ufuncs import expi
 from alignment import *
 from propagation_vector_free_field import *
@@ -13,6 +15,7 @@ from stft import *
 from ola import *
 from scipy.special import *
 from sympy import expint
+
 
 def Pspec_est(p_yy_arr, c_arr, w_arr, limits, fs):
     # Estimates Ps, Ps_zel, Pv_eff and Pout based on Pyy for a single frame.
@@ -52,15 +55,15 @@ def Pspec_est(p_yy_arr, c_arr, w_arr, limits, fs):
             add_term_p_s = (p_yy_arr_nm.copy() - 0.5 * (p_yy_arr_nn.copy() + p_yy_arr_mm.copy()) * c_arr_nm.real.copy()) / (1-c_arr_nm.real.copy())
             add_term_p_s[add_term_p_s < 0] = epsilon
             p_s_arr += add_term_p_s.copy()
-	    
-	    add_term_zel = p_yy_arr_nm.real.copy()
+
+            add_term_zel = p_yy_arr_nm.real.copy()
             add_term_zel[add_term_zel<0] = epsilon
             p_s_zel_arr += add_term_zel
 
             add_term_v = (0.5*(p_yy_arr_nn + p_yy_arr_mm) - p_yy_arr_nm)/(1-c_arr_nm.real.copy())
             add_term_v[add_term_v < 0] = epsilon
             p_v_arr += add_term_v
-                #Must hold the constraint |C(m,n,k)|<= limit for all m~=n
+            # Must hold the constraint |C(m,n,k)|<= limit for all m~=n
             #where limit < 1.
     p_s_arr = 2 * p_s_arr / (N*(N-1))
     p_s_zel_arr = 2 * p_s_zel_arr / (N * (N-1))
@@ -114,8 +117,8 @@ def G_est(p_s_arr, p_s_zel_arr, p_v_eff_arr, p_out_arr, k_arr):
     for i in range(1, ls+1):
         # Proposed
         g_arr[:, 2+3*(i-1)] = p_s_arr[:, 0]/(p_s_arr[:, 0] + p_v_eff_arr[:, i-1])
-	nu_mvdr_arr[:,0] = g_arr[:, 2+3*(i-1)] * (k_arr * k_arr.conj()) / p_v_eff_arr[:, i-1]
-	
+        nu_mvdr_arr[:,0] = g_arr[:, 2+3*(i-1)] * (k_arr * k_arr.conj()) / p_v_eff_arr[:, i-1]
+
         # Ephraim-Malah STSA estimator [Ephraim 1984].
         g_arr[:, 3+3*(i-1)] = gamma(1.5) * (np.sqrt(nu_mvdr_arr[:,0]) / (k_arr * k_arr.conj())) * p_v_eff_arr[:, i-1] * \
                               np.exp(-nu_mvdr_arr[:,0]/2) * ((1 + nu_mvdr_arr[:,0]) * iv(0, nu_mvdr_arr[:,0]/2) + nu_mvdr_arr[:,0] * iv(1, nu_mvdr_arr[:,0]/2))
@@ -124,12 +127,12 @@ def G_est(p_s_arr, p_s_zel_arr, p_v_eff_arr, p_out_arr, k_arr):
         # Check if the post-filter has inf or Nan
         # values. Then for these frequencies we use the Wiener post-filter
         ind = np.where(np.isnan(g_arr[:, 3+3*(i-1)]))
-	ind2 = np.where(np.isinf(g_arr[:, 3+3*(i-1)]))
+        ind2 = np.where(np.isinf(g_arr[:, 3+3*(i-1)]))
         g_arr[ind, 3+3*(i-1)] = g_arr[ind, 2+3*(i-1)].copy()
-	g_arr[ind2, 3+3*(i-1)] = g_arr[ind2, 2+3*(i-1)].copy()
+        g_arr[ind2, 3+3*(i-1)] = g_arr[ind2, 2+3*(i-1)].copy()
         # Ephraim-Malah STLSA estimator [Ephraim 1985]
         temp[:,0] = np.exp(0.5 * expn(1,nu_mvdr_arr[:,0]))
-	g_arr[:, 4+3*(i-1)] = g_arr[:, 2+3*(i-1)].copy() * temp[:,0]
+        g_arr[:, 4+3*(i-1)] = g_arr[:, 2+3*(i-1)].copy() * temp[:,0]
 
     return g_arr
 
@@ -233,3 +236,36 @@ def multichannel_speech_enhancement(x_arr, sensor_positions, source_position, wi
 
     return z_arr
 
+
+if __name__ == "__main__":
+    rate, x_arr = scipy.io.wavfile.read("./test4ch.wav")
+    sensor_positions = np.zeros((2, 4))
+    sensor_positions[:, 0] = [0.0343, -0.0267]
+    sensor_positions[:, 1] = [-0.0343, -0.0267]
+    sensor_positions[:, 2] = [0.0343, 0.0313]
+    sensor_positions[:, 3] = [-0.0343, 0.0313]
+
+    source_position = np.zeros((2, 1))
+    source_position[:, 0] = [0.0, 1.0]
+    noise_field_type = 'd'
+    noise_position = None
+    limit = 1
+    mu_db = -10
+    window_length = np.power(2, 8)
+    window_overlap = np.power(2, 7)
+    a = 0.05
+    c = 343
+    f_s = 10000
+    limits = f_s
+
+    results = multichannel_speech_enhancement(x_arr, sensor_positions, source_position, window_length, window_overlap,
+                                              noise_field_type, noise_position, limit, mu_db, a, c, f_s, limits)
+
+    results = results.astype(dtype=np.int16)
+
+    current_date = datetime.datetime.now().strftime("%d-%m-%y %H%M%S")
+    scipy.io.wavfile.write("./results/test_mvdr_%s.wav" % current_date, rate, results[:, 0])
+    scipy.io.wavfile.write("./results/test_mvdr_zelinski_%s.wav" % current_date, rate, results[:, 1])
+    scipy.io.wavfile.write("./results/test_mvdr_mccowan_%s.wav" % current_date, rate, results[:, 2])
+    scipy.io.wavfile.write("./results/test_mvdr_stsa_%s.wav" % current_date, rate, results[:, 3])
+    scipy.io.wavfile.write("./results/test_mvdr_log_stsa_%s.wav" % current_date, rate, results[:, 4])

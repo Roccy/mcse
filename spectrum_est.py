@@ -1,4 +1,5 @@
 import numpy
+import multiprocessing as mp
 
 
 def spectrum_est(Ym, Im, winlen, frame_id=0, a=0, Pyy_last=[]):
@@ -9,8 +10,8 @@ def spectrum_est(Ym, Im, winlen, frame_id=0, a=0, Pyy_last=[]):
     denom = numpy.linalg.norm(wHamm)**2
     Pyy = numpy.zeros((N, N, nfft))
 
-
     if Pyy_last==[]:
+        
         for k in range (0, nfft):
             Pyy[:, :, k] = numpy.real(numpy.dot(Ym[:, k, frame_id].conj()[numpy.newaxis].T, Ym[:, k, frame_id][numpy.newaxis])/denom) # attention frame_id or frame_id-1?????
     else:

@@ -23,9 +23,11 @@ def stft(Y, winlen, overlap):
     #print(add_zeros)
     #exit(0)
     for i in range(0,N):
-        tempo = numpy.concatenate((first_zeros, Y[:, i]), 1)
+        tempo = numpy.concatenate((first_zeros, Y[:, i]))
+        # tempo = numpy.concatenate((first_zeros, Y[:, i]), 1)
         #print(add_zeros.shape, Y[:,1].shape)
-        YY[:,i] = numpy.concatenate((tempo, add_zeros), 1)
+        # YY[:,i] = numpy.concatenate((tempo, add_zeros), 1)
+        YY[:,i] = numpy.concatenate((tempo, add_zeros))
         #print(YY.shape)
         array_ind_down = 0
         array_ind_up = winlen
